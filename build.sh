@@ -8,7 +8,7 @@ EXEC_NAME="Main"
 TMP_FILES=".o .obj"
 
 if [ "$1" == "--online-judge" ]; then
-    CXXFLAGS="$CXXFLAGS -D ONLINE_JUDGE"
+    CXXFLAGS="$CXXFLAGS -D ONLINE_JUDGE -D DEBUG"
 fi
 
 for src_file in $SRC_DIR/*.cpp; do

@@ -2,6 +2,9 @@
 #include <iostream>
 #include <fstream>
 #include "lexer.h"
+#include "parser.h"
+
+#define MODE 2
 
 void main_lexer() {
     std::string s, str;
@@ -25,7 +28,7 @@ void main_lexer() {
 
     Lexer lexer;
     auto ans = lexer.lexer(str);
-    
+
     if (ans.empty())
         return;
 
@@ -35,9 +38,25 @@ void main_lexer() {
         return;
     }
 
+#if (MODE == 1)
     for (const auto& s : ans) {
         std::cout << s;
     }
+#elif (MODE == 2)
+#ifdef DEBUG
+    std::cout << "[DEBUG] ===== lexer out =====\n";
+    int dbg_cnt = 0;
+    for (const auto& s : ans) {
+        std::cout << "[DEBUG] l#" << ++dbg_cnt << ": " << s;
+    }
+    std::cout << "[DEBUG] ===== lexer end =====\n\n";
+#endif
+    Parser parser;
+    ans = parser.parser(ans);
+    for (const auto& s : ans) {
+        std::cout << s;
+    }
+#endif
 }
 
 int main() {
