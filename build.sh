@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CXX=g++
-CXXFLAGS="-std=c++17 -Wall -g"
+CXXFLAGS="-std=c++17 -O2 -Wall -g"
 SRC_DIR="."
 BUILD_DIR="."
 EXEC_NAME="Main"
