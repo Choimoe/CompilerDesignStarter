@@ -738,7 +738,7 @@ std::vector<std::string> Parser::parser(std::vector<std::string>& res) {
         // If no valid action exists for this symbol, report a syntax error
         if (!to_be_gone) {
             std::cout << "Syntax Error" << "\n";
-            return {"0"};  // Return error code
+            return {"$"};  // Return error code
         }
 
         // If the action is negative, it indicates a reduction (negative value

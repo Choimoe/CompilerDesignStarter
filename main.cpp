@@ -54,6 +54,7 @@ void main_lexer() {
     Parser parser;
     ans = parser.parser(ans);
     for (const auto& s : ans) {
+        if (s[0] == '$') exit(0);
         std::cout << s;
     }
 #endif
