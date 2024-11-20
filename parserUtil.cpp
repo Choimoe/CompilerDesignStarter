@@ -25,13 +25,14 @@ int merge(int a, int b, std::vector<parserStruct::QuadTuple>& q) {
     if (a < 0 || b < 0)
         return std::max(a, b);  // If either list is empty, return the valid one
     int x = b;
-    int p;
+    int p = -1;
     while (x > 0) {
         p = x;
         x = q[x].Xfour;  // Find the last element of list b
     }
-    q[p].Xfour = a;  // Link the end of list b to the start of list a
-    return b;        // Return the index of list b
+    if (p != -1)
+        q[p].Xfour = a;  // Link the end of list b to the start of list a
+    return b;            // Return the index of list b
 }
 
 // Looks up a symbol by its name in the symbol table (s) and returns its index

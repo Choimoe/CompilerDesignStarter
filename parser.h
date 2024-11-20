@@ -8,6 +8,7 @@
 #include <stack>
 #include <string>
 #include <vector>
+#include <functional>
 
 // The Parser class encapsulates the entire parsing process, including symbol
 // management, grammar rules, and state handling.
