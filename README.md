@@ -16,7 +16,7 @@ The project can be built using the provided build script:
 ./start.sh
 ```
 
-For online judge environments, use:
+For local debug environments, use: (however it's reversed)
 ```bash
 ./start.sh --online-judge
 ```
