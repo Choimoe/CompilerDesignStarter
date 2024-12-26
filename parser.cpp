@@ -78,33 +78,11 @@ void Parser::add_non_terminal_closure(const Expression& I,
     }
 }
 
-// Computes the closure for a set of expressions
 std::set<Expression> Parser::get_closure(const std::set<Expression>& cur) {
     auto pre = cur;
     auto result = cur;
-    bool ok = false;
 
-    // Keep processing until no more changes happen
-    while (!ok) {
-        ok = true;
-        size_t sz = result.size();
-
-        // Loop through each expression in the current set of expressions
-        for (const auto& I : result) {
-            // If the position is already at the end of the expression, skip it
-            if (I.pos >= I.S.size()) {
-                continue;
-            }
-
-            std::string cur_str = I.S[I.pos];
-
-            // If the current symbol is non-terminal, add its closure
-            if (!OpKeyMap::terminal.count(cur_str)) {
-                add_non_terminal_closure(I, pre, cur_str);
-            }
-        }
-
-        // Merge the computed closures
+    auto merge_closures = [&](const std::set<Expression>& pre) {
         for (auto I : pre) {
             // Check if the expression already exists in the result set
             auto it = std::find_if(result.begin(), result.end(),
@@ -123,12 +101,39 @@ std::set<Expression> Parser::get_closure(const std::set<Expression>& cur) {
             // Add the new expression to the result set
             result.emplace(I.T, I.S, I.pos, I.idx, I.suffix);
         }
+    };
 
-        // If the result set has grown, continue processing
-        if (result.size() > sz) {
-            ok = false;
+    // Lambda function to compute the closure and return whether changes were
+    // made
+    auto process_closure = [&]() -> bool {
+        size_t sz = result.size();
+
+        // Loop through each expression in the current set of expressions
+        for (const auto& I : result) {
+            // If the position is already at the end of the expression, skip it
+            if (I.pos >= I.S.size()) {
+                continue;
+            }
+
+            std::string cur_str = I.S[I.pos];
+
+            // If the current symbol is non-terminal, add its closure
+            if (!OpKeyMap::terminal.count(cur_str)) {
+                add_non_terminal_closure(I, pre, cur_str);
+            }
         }
-    }
+
+        // Merge the computed closures using the lambda
+        merge_closures(pre);
+
+        // If the result set has grown, return true to indicate further
+        // processing is needed
+        return result.size() > sz;
+    };
+
+    // Keep processing until no more changes happen
+    while (process_closure())
+        ;
 
     return result;  // Return the computed closure
 }
@@ -180,36 +185,38 @@ void Parser::compute_first_set(std::vector<std::string>& tmp) {
     for (const auto& [x, _] : OpKeyMap::terminal) {
         firstSets[x].emplace(x);
     }
+    auto check_empty = [&](const auto& s) -> bool {
+        bool ret = true;
 
-    bool ok = false;
-    while (!ok) {
-        ok = true;
+        // Process the symbols in the production
+        for (size_t i = 0; i < s.size(); ++i) {
+            ret = false;
 
+            // Add the FIRST sets of the symbols to tmp
+            for (const auto& xx : firstSets[s[i]]) {
+                if (xx == "^") {
+                    ret = true;  // If epsilon, mark as empty
+                } else {
+                    tmp.push_back(xx);  // Add non-epsilon symbols to tmp
+                }
+            }
+
+            if (!ret)
+                return false;
+        }
+
+        return true;
+    };
+
+    auto compute_step = [&]() -> bool {
         // Iterate through all grammar rules
         for (const auto& [x, y] : grammarRules) {
             size_t prev_size = firstSets[x].size();
 
             // Process each production in the grammar rule
             for (const auto& [s, _] : y) {
-                bool is_empty = true;
-
-                // Process the symbols in the production
-                for (size_t i = 0; i < s.size() && is_empty; ++i) {
-                    is_empty = false;
-
-                    // Add the FIRST sets of the symbols to tmp
-                    for (const auto& xx : firstSets[s[i]]) {
-                        if (xx == "^") {
-                            is_empty = true;  // If epsilon, mark as empty
-                        } else {
-                            tmp.push_back(
-                                xx);  // Add non-epsilon symbols to tmp
-                        }
-                    }
-                }
-
                 // If the production is empty (epsilon), add "^" to tmp
-                if (is_empty) {
+                if (check_empty(s)) {
                     tmp.push_back("^");
                 }
 
@@ -223,10 +230,14 @@ void Parser::compute_first_set(std::vector<std::string>& tmp) {
 
             // If the FIRST set size increased, continue processing
             if (prev_size < firstSets[x].size()) {
-                ok = false;
+                return true;
             }
         }
-    }
+        return false;
+    };
+
+    while (compute_step())
+        ;
 }
 
 // Retrieves the item sets and symbols for a given index in itemSets
@@ -396,7 +407,18 @@ std::vector<std::string> Parser::generateParserOutput(
         attributeStack.push(r);   \
     } while (0)
 #define MAKE_QUAD(a, b, c, d) qt = parserStruct::QuadTuple((a), (b), (c), (d))
+#define _GEN_EMPTY_CASE(t) auto case##t = [&](){}
+#define _GEN_SYM_CASE(t, s) \
+    auto case##t = [&](){attd.op = s; attributeStack.push(attd);}
+#define _GEN_IO_CASE(t, p, f)                                               \
+    auto case##t = [&](){                                                   \
+        POP_STACK(p);                                                       \
+        MAKE_QUAD(f, "-", "-", parserUtil::lookup(att1.name, symbolTable)); \
+        SAVE_STACK(attd);}
 std::vector<std::string> Parser::parser(std::vector<std::string>& res) {
+    parserStruct::Attribute att1, att2, att3, att4, att5, attd;
+    parserStruct::QuadTuple qt;
+    parserStruct::Symbol symb;
     init_symbol_mapping();  // Initialize the symbol mappings (e.g., for
                             // tokenization)
     std::vector<std::string> tmp =
@@ -420,280 +442,292 @@ std::vector<std::string> Parser::parser(std::vector<std::string>& res) {
     int offset = 0;  // Initialize offset (typically used for error handling or
                      // lookahead)
     int nxt = 0;     // Initialize the next quadruple index
+    auto clear_attributes = [&]() {
+        att1 = parserStruct::Attribute();
+        att2 = parserStruct::Attribute();
+        att3 = parserStruct::Attribute();
+        att4 = parserStruct::Attribute();
+        att5 = parserStruct::Attribute();
+        attd = parserStruct::Attribute();
+        qt = parserStruct::QuadTuple();
+        symb = parserStruct::Symbol();
+    };
+    _GEN_EMPTY_CASE(0);
+    _GEN_EMPTY_CASE(1);
+    auto case2 = [&]() {
+        POP_STACK(3);
+        MAKE_QUAD("End", "-", "-", "-");
+        quadruples.push_back(qt);
+        nxt++;
+        att2.name = "SUBPROG";
+        attributeStack.push(att2);
+    };
+    auto case3 = [&]() {
+        offset = 0;
+        attributeStack.push(att1);
+    };
+    auto case4 = [&]() {
+        att1.quad = nxt;
+        attributeStack.push(att1);
+    };
+    auto case5 = [&]() { attributeStack.pop(); };
+    _GEN_EMPTY_CASE(6);
+    auto case7 = [&]() {
+        att1.type = "int";
+        att1.width = 4;
+        attributeStack.push(att1);
+    };
+    auto case8 = [&]() {
+        att1.type = "double";
+        att1.width = 8;
+        attributeStack.push(att1);
+    };
+    auto case9 = [&]() {
+        att1.name = symbolStack.top();
+        attributeStack.push(att1);
+    };
+    auto case11 = [&]() {
+        POP_STACK(2);
+        symb = parserStruct::Symbol(att1.name, att2.type, offset);
+
+        bool isSameName = 0;
+        for (auto& i : symbolTable) {
+            if (symb.name == i.name) {
+                isSameName = 1;
+                break;
+            }
+        }
+        if (isSameName) {
+            std::cout << "Syntax Error\n";
+            exit(0);
+        }
+        symbolTable.push_back(symb);
+        offset += att2.width;
+        att3.type = att2.type;
+        att3.width = att2.width;
+        attributeStack.push(att3);
+    };
+    auto case14 = [&]() {
+        att1.nextlist = -1;
+        attributeStack.pop();
+        attributeStack.push(att1);
+    };
+    auto case15 = [&]() {
+        att1.nextlist = -1;
+        attributeStack.push(att1);
+    };
+    _GEN_EMPTY_CASE(16);
+    auto case17 = [&]() {
+        POP_STACK(4);
+        parserUtil::backpatch(att1.nextlist, att4.quad, quadruples);
+        parserUtil::backpatch(att3.truelist, att2.quad, quadruples);
+        att5.nextlist = att3.falselist;
+        attributeStack.push(att5);
+        MAKE_QUAD("j", "-", "-", "");
+        qt.Xfour = att4.quad;
+        quadruples.push_back(qt);
+        nxt++;
+    };
+    auto case18 = [&]() {
+        POP_STACK(3);
+        parserUtil::backpatch(att3.truelist, att2.quad, quadruples);
+        att4.nextlist =
+            parserUtil::merge(att3.falselist, att1.nextlist, quadruples);
+        attributeStack.push(att4);
+    };
+    auto case19 = [&]() {
+        POP_STACK(2);
+        MAKE_QUAD("=", att1.place, "-",
+                  parserUtil::lookup(att2.name, symbolTable));
+        SAVE_STACK(att1);
+    };
+    auto case20 = [&]() {
+        POP_STACK(3);
+        parserUtil::backpatch(att3.nextlist, att2.quad, quadruples);
+        att4.nextlist = att1.nextlist;
+        attributeStack.push(att4);
+    };
+    _GEN_EMPTY_CASE(21);
+    auto case22 = [&]() {
+        POP_STACK(2);
+        att3.place = parserUtil::Temp_New(0, tempVariableIndices);
+        att3.type = "int";
+        MAKE_QUAD("||", att2.place, att1.place, att3.place);
+        SAVE_STACK(att3);
+    };
+    _GEN_EMPTY_CASE(23);
+    auto case24 = [&]() {
+        POP_STACK(2);
+        att3.place = parserUtil::Temp_New(0, tempVariableIndices);
+        att3.type = "int";
+        MAKE_QUAD("&&", att2.place, att1.place, att3.place);
+        SAVE_STACK(att3);
+    };
+    _GEN_EMPTY_CASE(25);
+    _GEN_EMPTY_CASE(26);
+    auto case27 = [&]() {
+        POP_STACK(1);
+        att3.place = parserUtil::Temp_New(0, tempVariableIndices);
+        att3.type = "int";
+        MAKE_QUAD("!", att1.place, "-", att3.place);
+        SAVE_STACK(att3);
+    };
+    auto case28 = [&]() {
+        POP_STACK(3);
+        attd.place = parserUtil::Temp_New(0, tempVariableIndices);
+        attd.type = "int";
+        MAKE_QUAD(att2.op, att3.place, att1.place, attd.place);
+        SAVE_STACK(attd);
+    };
+    _GEN_EMPTY_CASE(29);
+    auto case30 = [&]() {
+        POP_STACK(3);
+        attd.place = parserUtil::Temp_New(OpKeyMap::typr_to_int.at(att3.type),
+                                          tempVariableIndices);
+        attd.type = att3.type;
+        MAKE_QUAD(att2.op, att3.place, att1.place, attd.place);
+        SAVE_STACK(attd);
+    };
+    _GEN_EMPTY_CASE(31);
+    _GEN_EMPTY_CASE(32);
+    auto case33 = [&]() {
+        POP_STACK(3);
+        attd.place = parserUtil::Temp_New(OpKeyMap::typr_to_int.at(att1.type),
+                                          tempVariableIndices);
+        attd.type = att1.type;
+        MAKE_QUAD(att2.op, att3.place, att1.place, attd.place);
+        SAVE_STACK(attd);
+    };
+    auto case34 = [&]() {
+        POP_STACK(1);
+        attd.place = parserUtil::lookup(att1.name, symbolTable);
+        attd.type = parserUtil::look_up_type(att1.name, symbolTable);
+        attributeStack.push(attd);
+    };
+    auto case35 = [&]() {
+        attd.place = parserUtil::Temp_New(0, tempVariableIndices);
+        attd.type = "int";
+        MAKE_QUAD("=", symbolStack.top(), "-", attd.place);
+        SAVE_STACK(attd);
+    };
+    auto case36 = [&]() {
+        attd.place = parserUtil::Temp_New(1, tempVariableIndices);
+        attd.type = "double";
+        MAKE_QUAD("=", std::to_string(stof(symbolStack.top())), "-",
+                  attd.place);
+        SAVE_STACK(attd);
+    };
+    _GEN_EMPTY_CASE(37);
+    auto case38 = [&]() {
+        POP_STACK(2);
+        attd.place = parserUtil::Temp_New(OpKeyMap::typr_to_int.at(att1.type),
+                                          tempVariableIndices);
+        attd.type = att1.type;
+        MAKE_QUAD(att2.op, "0", att1.place, attd.place);
+        SAVE_STACK(attd);
+    };
+    auto case39 = [&]() {
+        POP_STACK(3);
+        parserUtil::backpatch(att3.falselist, att2.quad, quadruples);
+        attd.truelist =
+            parserUtil::merge(att3.truelist, att1.truelist, quadruples);
+        attd.falselist = att1.falselist;
+        attributeStack.push(attd);
+    };
+    _GEN_EMPTY_CASE(40);
+    auto case41 = [&]() {
+        POP_STACK(3);
+        parserUtil::backpatch(att3.truelist, att2.quad, quadruples);
+        attd.falselist =
+            parserUtil::merge(att3.falselist, att1.falselist, quadruples);
+        attd.truelist = att1.truelist;
+        attributeStack.push(attd);
+    };
+    _GEN_EMPTY_CASE(42);
+    _GEN_EMPTY_CASE(43);
+    auto case44 = [&]() {
+        POP_STACK(1);
+        attd.falselist = att1.truelist;
+        attd.truelist = att1.falselist;
+        attributeStack.push(attd);
+    };
+    auto case45 = [&]() {
+        POP_STACK(3);
+        attd.truelist = nxt;
+        attd.falselist = nxt + 1;
+        MAKE_QUAD("j" + att2.op, att3.place, att1.place, "0");
+        quadruples.push_back(qt);
+        nxt++;
+        MAKE_QUAD("j", "-", "-", "0");
+        SAVE_STACK(attd);
+    };
+    auto case46 = [&]() {
+        POP_STACK(1);
+        attd.truelist = nxt;
+        attd.falselist = nxt + 1;
+        MAKE_QUAD("jnz", att1.place, "-", "0");
+        quadruples.push_back(qt);
+        nxt++;
+        MAKE_QUAD("j", "-", "-", "0");
+        SAVE_STACK(attd);
+    };
+    auto case47 = [&]() {
+        attd.place = parserUtil::Temp_New(0, tempVariableIndices);
+        attd.type = "int";
+        MAKE_QUAD("=", symbolStack.top(), "-", attd.place);
+        SAVE_STACK(attd);
+    };
+    auto case48 = [&]() {
+        attd.place = parserUtil::Temp_New(1, tempVariableIndices);
+        attd.type = "double";
+        MAKE_QUAD("=", std::to_string(stof(symbolStack.top())), "-",
+                  attd.place);
+        SAVE_STACK(attd);
+    };
+    auto case49 = [&]() {
+        POP_STACK(1);
+        attd.place = parserUtil::lookup(att1.name, symbolTable);
+        attd.type = parserUtil::look_up_type(att1.name, symbolTable);
+        attributeStack.push(attd);
+    };
+    _GEN_SYM_CASE(50, "+");
+    _GEN_SYM_CASE(51, "-");
+    _GEN_SYM_CASE(52, "*");
+    _GEN_SYM_CASE(53, "/");
+    _GEN_SYM_CASE(54, "==");
+    _GEN_SYM_CASE(55, "!=");
+    _GEN_SYM_CASE(56, "<");
+    _GEN_SYM_CASE(57, "<=");
+    _GEN_SYM_CASE(58, ">");
+    _GEN_SYM_CASE(59, ">=");
+
+    _GEN_IO_CASE(61, 2, "R");
+    _GEN_IO_CASE(62, 1, "R");
+    _GEN_IO_CASE(64, 1, "W");
+    _GEN_IO_CASE(65, 2, "W");
+
+    _GEN_EMPTY_CASE(60);
+    _GEN_EMPTY_CASE(63);
+    _GEN_EMPTY_CASE(66);
+    _GEN_EMPTY_CASE(67);
+
     auto reduce = [&](int idx) {
         // Initialize attribute structures to store data during parsing
-        parserStruct::Attribute att1, att2, att3, att4, att5, attd;
-        parserStruct::QuadTuple qt;
-        parserStruct::Symbol symb;
-
-        auto case2 = [&]() {
-            POP_STACK(3);
-            MAKE_QUAD("End", "-", "-", "-");
-            quadruples.push_back(qt);
-            nxt++;
-            att2.name = "SUBPROG";
-            attributeStack.push(att2);
-        };
-        auto case3 = [&]() {
-            offset = 0;
-            attributeStack.push(att1);
-        };
-        auto case4 = [&]() {
-            att1.quad = nxt;
-            attributeStack.push(att1);
-        };
-        auto case5 = [&]() { attributeStack.pop(); };
-        auto case7 = [&]() {
-            att1.type = "int";
-            att1.width = 4;
-            attributeStack.push(att1);
-        };
-        auto case8 = [&]() {
-            att1.type = "double";
-            att1.width = 8;
-            attributeStack.push(att1);
-        };
-        auto case9 = [&]() {
-            att1.name = symbolStack.top();
-            attributeStack.push(att1);
-        };
-        auto case11 = [&]() {
-            POP_STACK(2);
-            symb = parserStruct::Symbol(att1.name, att2.type, offset);
-
-            bool isSameName = 0;
-            for (auto& i : symbolTable) {
-                if (symb.name == i.name) {
-                    isSameName = 1;
-                    break;
-                }
-            }
-            if (isSameName) {
-                std::cout << "Syntax Error\n";
-                exit(0);
-            }
-            symbolTable.push_back(symb);
-            offset += att2.width;
-            att3.type = att2.type;
-            att3.width = att2.width;
-            attributeStack.push(att3);
-        };
-        auto case14 = [&]() {
-            att1.nextlist = -1;
-            attributeStack.pop();
-            attributeStack.push(att1);
-        };
-        auto case15 = [&]() {
-            att1.nextlist = -1;
-            attributeStack.push(att1);
-        };
-        auto case17 = [&]() {
-            POP_STACK(4);
-            parserUtil::backpatch(att1.nextlist, att4.quad, quadruples);
-            parserUtil::backpatch(att3.truelist, att2.quad, quadruples);
-            att5.nextlist = att3.falselist;
-            attributeStack.push(att5);
-            MAKE_QUAD("j", "-", "-", "");
-            qt.Xfour = att4.quad;
-            quadruples.push_back(qt);
-            nxt++;
-        };
-
-        auto case18 = [&]() {
-            POP_STACK(3);
-            parserUtil::backpatch(att3.truelist, att2.quad, quadruples);
-            att4.nextlist =
-                parserUtil::merge(att3.falselist, att1.nextlist, quadruples);
-            attributeStack.push(att4);
-        };
-
-        auto case19 = [&]() {
-            POP_STACK(2);
-            MAKE_QUAD("=", att1.place, "-",
-                      parserUtil::lookup(att2.name, symbolTable));
-            SAVE_STACK(att1);
-        };
-        auto case20 = [&]() {
-            POP_STACK(3);
-            parserUtil::backpatch(att3.nextlist, att2.quad, quadruples);
-            att4.nextlist = att1.nextlist;
-            attributeStack.push(att4);
-        };
-        auto case22 = [&]() {
-            POP_STACK(2);
-            att3.place = parserUtil::Temp_New(0, tempVariableIndices);
-            att3.type = "int";
-            MAKE_QUAD("||", att2.place, att1.place, att3.place);
-            SAVE_STACK(att3);
-        };
-        auto case24 = [&]() {
-            POP_STACK(2);
-            att3.place = parserUtil::Temp_New(0, tempVariableIndices);
-            att3.type = "int";
-            MAKE_QUAD("&&", att2.place, att1.place, att3.place);
-            SAVE_STACK(att3);
-        };
-
-        auto case27 = [&]() {
-            POP_STACK(1);
-            att3.place = parserUtil::Temp_New(0, tempVariableIndices);
-            att3.type = "int";
-            MAKE_QUAD("!", att1.place, "-", att3.place);
-            SAVE_STACK(att3);
-        };
-
-        auto case28 = [&]() {
-            POP_STACK(3);
-            attd.place = parserUtil::Temp_New(0, tempVariableIndices);
-            attd.type = "int";
-            MAKE_QUAD(att2.op, att3.place, att1.place, attd.place);
-            SAVE_STACK(attd);
-        };
-        auto case30 = [&]() {
-            POP_STACK(3);
-            attd.place = parserUtil::Temp_New(
-                OpKeyMap::typr_to_int.at(att3.type), tempVariableIndices);
-            attd.type = att3.type;
-            MAKE_QUAD(att2.op, att3.place, att1.place, attd.place);
-            SAVE_STACK(attd);
-        };
-        auto case33 = [&]() {
-            POP_STACK(3);
-            attd.place = parserUtil::Temp_New(
-                OpKeyMap::typr_to_int.at(att1.type), tempVariableIndices);
-            attd.type = att1.type;
-            MAKE_QUAD(att2.op, att3.place, att1.place, attd.place);
-            SAVE_STACK(attd);
-        };
-
-        auto case34 = [&]() {
-            POP_STACK(1);
-            attd.place = parserUtil::lookup(att1.name, symbolTable);
-            attd.type = parserUtil::look_up_type(att1.name, symbolTable);
-            attributeStack.push(attd);
-        };
-
-        auto case35 = [&]() {
-            attd.place = parserUtil::Temp_New(0, tempVariableIndices);
-            attd.type = "int";
-            MAKE_QUAD("=", symbolStack.top(), "-", attd.place);
-            SAVE_STACK(attd);
-        };
-        auto case36 = [&]() {
-            attd.place = parserUtil::Temp_New(1, tempVariableIndices);
-            attd.type = "double";
-            MAKE_QUAD("=", std::to_string(stof(symbolStack.top())), "-",
-                      attd.place);
-            SAVE_STACK(attd);
-        };
-        auto case38 = [&]() {
-            POP_STACK(2);
-            attd.place = parserUtil::Temp_New(
-                OpKeyMap::typr_to_int.at(att1.type), tempVariableIndices);
-            attd.type = att1.type;
-            MAKE_QUAD(att2.op, "0", att1.place, attd.place);
-            SAVE_STACK(attd);
-        };
-        auto case39 = [&]() {
-            POP_STACK(3);
-            parserUtil::backpatch(att3.falselist, att2.quad, quadruples);
-            attd.truelist =
-                parserUtil::merge(att3.truelist, att1.truelist, quadruples);
-            attd.falselist = att1.falselist;
-            attributeStack.push(attd);
-        };
-        auto case41 = [&]() {
-            POP_STACK(3);
-            parserUtil::backpatch(att3.truelist, att2.quad, quadruples);
-            attd.falselist =
-                parserUtil::merge(att3.falselist, att1.falselist, quadruples);
-            attd.truelist = att1.truelist;
-            attributeStack.push(attd);
-        };
-
-        auto case44 = [&]() {
-            POP_STACK(1);
-            attd.falselist = att1.truelist;
-            attd.truelist = att1.falselist;
-            attributeStack.push(attd);
-        };
-        auto case45 = [&]() {
-            POP_STACK(3);
-            attd.truelist = nxt;
-            attd.falselist = nxt + 1;
-            MAKE_QUAD("j" + att2.op, att3.place, att1.place, "0");
-            quadruples.push_back(qt);
-            nxt++;
-            MAKE_QUAD("j", "-", "-", "0");
-            SAVE_STACK(attd);
-        };
-        auto case46 = [&]() {
-            POP_STACK(1);
-            attd.truelist = nxt;
-            attd.falselist = nxt + 1;
-            MAKE_QUAD("jnz", att1.place, "-", "0");
-            quadruples.push_back(qt);
-            nxt++;
-            MAKE_QUAD("j", "-", "-", "0");
-            SAVE_STACK(attd);
-        };
-        auto case47 = [&]() {
-            attd.place = parserUtil::Temp_New(0, tempVariableIndices);
-            attd.type = "int";
-            MAKE_QUAD("=", symbolStack.top(), "-", attd.place);
-            SAVE_STACK(attd);
-        };
-        auto case48 = [&]() {
-            attd.place = parserUtil::Temp_New(1, tempVariableIndices);
-            attd.type = "double";
-            MAKE_QUAD("=", std::to_string(stof(symbolStack.top())), "-",
-                      attd.place);
-            SAVE_STACK(attd);
-        };
-        auto case49 = [&]() {
-            POP_STACK(1);
-            attd.place = parserUtil::lookup(att1.name, symbolTable);
-            attd.type = parserUtil::look_up_type(att1.name, symbolTable);
-            attributeStack.push(attd);
-        };
-#define _GEN_SYM_CASE(t, s) \
-    auto case##t = [&]() { attd.op = s; attributeStack.push(attd); }
-#define _GEN_IO_CASE(t, p, f)                                               \
-    auto case##t = [&]() {                                                  \
-        POP_STACK(p);                                                       \
-        MAKE_QUAD(f, "-", "-", parserUtil::lookup(att1.name, symbolTable)); \
-        SAVE_STACK(attd);                                                   \
-    }
-        _GEN_SYM_CASE(50, "+");
-        _GEN_SYM_CASE(51, "-");
-        _GEN_SYM_CASE(52, "*");
-        _GEN_SYM_CASE(53, "/");
-        _GEN_SYM_CASE(54, "==");
-        _GEN_SYM_CASE(55, "!=");
-        _GEN_SYM_CASE(56, "<");
-        _GEN_SYM_CASE(57, "<=");
-        _GEN_SYM_CASE(58, ">");
-        _GEN_SYM_CASE(59, ">=");
-        _GEN_IO_CASE(61, 2, "R");
-        _GEN_IO_CASE(62, 1, "R");
-        _GEN_IO_CASE(64, 1, "W");
-        _GEN_IO_CASE(65, 2, "W");
+        clear_attributes();
 
 #define MIN_CASE_VALUE 2
 #define MAX_CASE_VALUE 65
 
-        // Generate the final switch function for handling all cases
         std::vector<std::function<void()>> switchFunc = {
-            nullptr, nullptr, case2,   case3,   case4,   case5,   nullptr,
-            case7,   case8,   case9,   case11,  case11,  case14,  case14,
-            case14,  case15,  nullptr, case17,  case18,  case19,  case20,
-            nullptr, case22,  nullptr, case24,  nullptr, nullptr, case27,
-            case28,  nullptr, case30,  nullptr, nullptr, case33,  case34,
-            case35,  case36,  nullptr, case38,  case39,  nullptr, case41,
-            nullptr, nullptr, case44,  case45,  case46,  case47,  case48,
-            case49,  case50,  case51,  case52,  case53,  case54,  case55,
-            case56,  case57,  case58,  case59,  nullptr, case61,  case62,
-            nullptr, case64,  case65,  nullptr};
+            case0,  case1,  case2,  case3,  case4,  case5,  case6,  case7,
+            case8,  case9,  case11, case11, case14, case14, case14, case15,
+            case16, case17, case18, case19, case20, case21, case22, case23,
+            case24, case25, case26, case27, case28, case29, case30, case31,
+            case32, case33, case34, case35, case36, case37, case38, case39,
+            case40, case41, case42, case43, case44, case45, case46, case47,
+            case48, case49, case50, case51, case52, case53, case54, case55,
+            case56, case57, case58, case59, case60, case61, case62, case63,
+            case64, case65, case66, case67};
 
         // Execute the corresponding case if the index is valid
         if (idx >= MIN_CASE_VALUE && idx <= MAX_CASE_VALUE &&
@@ -708,7 +742,7 @@ std::vector<std::string> Parser::parser(std::vector<std::string>& res) {
 #endif
 
     // Start parsing loop
-    while (1) {
+    while (true) {
         auto [x, y] = temp[cur];  // Get current element from temp (x is the
                                   // symbol, y is its type)
         int nxtsymbol{};          // Initialize the next symbol identifier

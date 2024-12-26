@@ -4,7 +4,7 @@
 #include "lexer.h"
 #include "parser.h"
 
-#define MODE 2
+#define TASK 2
 
 void main_lexer() {
     std::string s, str;
@@ -38,11 +38,11 @@ void main_lexer() {
         return;
     }
 
-#if (MODE == 1)
+#if (TASK == 1)
     for (const auto& s : ans) {
         std::cout << s;
     }
-#elif (MODE == 2)
+#elif (TASK == 2)
 #ifdef DEBUG
     std::cout << "[DEBUG] ===== lexer out =====\n";
     int dbg_cnt = 0;
