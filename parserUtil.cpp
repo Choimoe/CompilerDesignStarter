@@ -78,4 +78,32 @@ std::string Temp_New(int k, std::vector<int>& t) {
     return res;                  // Return the new temporary variable name
 }
 
+std::tuple<size_t, size_t, size_t, size_t, size_t> findPositions(std::string_view str, char delimiter) {
+    size_t pos1 = str.find('(');
+    size_t pos2 = str.find(delimiter, pos1 + 1);
+    size_t pos3 = str.find(delimiter, pos2 + 1);
+    size_t pos4 = str.find(delimiter, pos3 + 1);
+    size_t pos5 = str.find(')', pos4 + 1);
+
+    return std::make_tuple(pos1, pos2, pos3, pos4, pos5);
+}
+
+parserStruct::QuadTuple parseQuadTuple(std::string_view input) {
+    auto [posOpenParen, posComma1, posComma2, posComma3, posCloseParen] = findPositions(input, ',');
+
+    if (posOpenParen == std::string_view::npos || posComma1 == std::string_view::npos ||
+        posComma2 == std::string_view::npos || posComma3 == std::string_view::npos ||
+        posCloseParen == std::string_view::npos) {
+        throw std::invalid_argument("Invalid input format for QuadTuple string.");
+    }
+
+    // Extract substrings using the found positions and construct a QuadTuple
+    return parserStruct::QuadTuple{
+        std::string(input.substr(posOpenParen + 1, posComma1 - posOpenParen - 1)),
+        std::string(input.substr(posComma1 + 1, posComma2 - posComma1 - 1)),
+        std::string(input.substr(posComma2 + 1, posComma3 - posComma2 - 1)),
+        std::string(input.substr(posComma3 + 1, posCloseParen - posComma3 - 1))
+    };
+}
+
 }  // namespace parserUtil

@@ -12,6 +12,19 @@ static const std::unordered_map<std::string, std::string> operators{
     {"*", "TIMES"}, {"/", "DIVISION"}, {",", "COMMA"}, {"(", "BRACE"},
     {")", "BRACE"}, {"{", "BRACE"},    {"}", "BRACE"}, {";", "SEMICOLON"}};
 
+static const std::unordered_map<std::string, std::string> optAssembler = {
+    {"+", "add "},  {"-", "sub "},  {"*", "mul "},  {"/", "div "},
+    {"==", "cmp "}, {"!=", "cmp "}, {"<", "cmp "},  {"<=", "cmp "},
+    {">", "cmp "},  {">=", "cmp "}, {"&&", "and "}, {"||", "or "},
+    {"!", "not "}};
+static const std::unordered_map<std::string, std::string> jumpAssembler = {
+    {"j>=", "jge"}, {"j<=", "jle"}, {"j==", "je"},
+    {"j!=", "jne"}, {"j>", "jg"},   {"j<", "jl"}};
+
+static const std::unordered_map<std::string, std::string> setAssembler = {
+    {"==", "sete "}, {"!=", "setne "}, {"<", "setl "},
+    {"<=", "setle "}, {">", "setg "},   {">=", "setge "}};
+
 static const std::unordered_map<std::string, std::string> keywords{
     {"int", "INTSYM"},       {"double", "DOUBLESYM"}, {"scanf", "SCANFSYM"},
     {"printf", "PRINTFSYM"}, {"if", "IFSYM"},         {"then", "THENSYM"},

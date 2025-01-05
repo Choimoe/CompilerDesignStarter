@@ -31,6 +31,12 @@ std::string look_up_type(const std::string& name,
 // the temporary variable index (t)
 std::string Temp_New(int k, std::vector<int>& t);
 
+std::tuple<size_t, size_t, size_t, size_t, size_t> findPositions(
+    std::string_view str,
+    char delimiter);
+
+parserStruct::QuadTuple parseQuadTuple(std::string_view input);
+
 }  // namespace parserUtil
 
 #endif  // PARSERUTIL_H

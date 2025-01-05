@@ -3,8 +3,9 @@
 #include <fstream>
 #include "lexer.h"
 #include "parser.h"
+#include "objectGen.h"
 
-#define TASK 2
+#define TASK 3
 
 void main_lexer() {
     std::string s, str;
@@ -26,6 +27,12 @@ void main_lexer() {
     }
 #endif
 
+#if (TASK == 3)
+    ObjectCodeGenerator ocg;
+    auto ans = ocg.generate(str);
+    std::cout << ans;
+    return;
+#else
     Lexer lexer;
     auto ans = lexer.lexer(str);
 
@@ -57,6 +64,7 @@ void main_lexer() {
         if (s[0] == '$') exit(0);
         std::cout << s;
     }
+#endif
 #endif
 }
 
