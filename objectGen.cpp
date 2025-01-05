@@ -17,7 +17,6 @@ void ObjectCodeGenerator::parseInput(std::istringstream& iss) {
     int n = 0;
     iss >> n;
 
-    // Parse symbol table
     for (int i = 0; i < n; i++) {
         objectStruct::MemoryNode node;
         std::string t;
@@ -301,7 +300,6 @@ std::string ObjectCodeGenerator::formatOutput() const {
     return oss.str();
 }
 
-// Additional helper methods implementation...
 void ObjectCodeGenerator::updateUsePosition(const std::string& variable,
                                             int status) {
     if (variable[0] == 'T') {

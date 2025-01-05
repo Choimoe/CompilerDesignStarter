@@ -10,96 +10,123 @@
 #include <vector>
 #include <functional>
 
-// The Parser class encapsulates the entire parsing process, including symbol
-// management, grammar rules, and state handling.
+/**
+ * @class Parser
+ * @brief Encapsulates the entire parsing process, including grammar rules, symbol 
+ * management, and state handling for syntax analysis.
+ */
 class Parser {
 public:
-    Parser();  // Constructor to initialize the parser
+    /**
+     * @brief Constructs a Parser object and initializes the necessary components.
+     */
+    Parser();
 
-    // Main parser function, processes input and returns a vector of strings
-    // (likely the parsed output)
+    /**
+     * @brief Main function to process the input and generate parsed output.
+     * 
+     * @param res A reference to a vector of strings containing the input data.
+     * @return A vector of strings representing the parsed output.
+     */
     std::vector<std::string> parser(std::vector<std::string>& res);
 
 private:
-    int parserState;  // Variable to track the current parser state
+    int parserState; ///< Tracks the current state of the parser.
 
-    // Maps symbols (e.g., terminal and non-terminal names) to integer IDs for
-    // easy lookup
-    std::map<std::string, int> symbolToIdMap;
+    std::map<std::string, int> symbolToIdMap; ///< Maps symbols to integer IDs for efficient lookup.
 
-    // The LR(1) parsing table (goto table), which defines the transition rules
-    // for parser states
-    std::vector<std::vector<int>> gotoTable;
+    std::vector<std::vector<int>> gotoTable; ///< LR(1) parsing table defining state transitions.
 
-    // First sets for each non-terminal symbol, which define the set of terminal
-    // symbols that can begin a string derived from the non-terminal
-    std::map<std::string, std::set<std::string>> firstSets;
+    std::map<std::string, std::set<std::string>> firstSets; ///< Stores first sets for grammar symbols.
 
-    // Grammar rules stored in a map where each non-terminal has a list of
-    // production rules
-    std::map<std::string, std::vector<std::pair<std::vector<std::string>, int>>>
-        grammarRules;
+    std::map<std::string, std::vector<std::pair<std::vector<std::string>, int>>> grammarRules; 
+    ///< Contains grammar rules with non-terminal symbols and their production rules.
 
-    // Flattened grammar rules, potentially for easier handling during parsing
-    std::vector<std::pair<std::string, std::vector<std::string>>>
-        flattenedGrammarRules;
+    std::vector<std::pair<std::string, std::vector<std::string>>> flattenedGrammarRules; 
+    ///< Stores flattened grammar rules for easier parsing operations.
 
-    // Item sets used in LR parsing, likely for managing items in an item set
-    // (LR items)
-    std::vector<std::set<Expression>> itemSets;
+    std::vector<std::set<Expression>> itemSets; ///< Item sets used for LR parsing.
 
-    // Stack of attributes used during parsing (e.g., semantic values)
-    std::stack<parserStruct::Attribute> attributeStack;
+    std::stack<parserStruct::Attribute> attributeStack; ///< Stack of attributes for semantic analysis.
 
-    // Symbol table holding the parsed symbols (both terminals and
-    // non-terminals)
-    std::vector<parserStruct::Symbol> symbolTable;
+    std::vector<parserStruct::Symbol> symbolTable; ///< Symbol table for terminals and non-terminals.
 
-    // Stack of parser states for managing the LR parsing process
-    std::stack<int> stateStack;
+    std::stack<int> stateStack; ///< Tracks parser states during parsing.
 
-    // Stack of symbols for tracking the symbols in the current production rule
-    std::stack<std::string> symbolStack;
+    std::stack<std::string> symbolStack; ///< Tracks symbols used in parsing operations.
 
-    // List of quadruples (intermediate code) generated during parsing
-    std::vector<parserStruct::QuadTuple> quadruples;
+    std::vector<parserStruct::QuadTuple> quadruples; ///< Intermediate code generated during parsing.
 
-    // Temporary variable indices used to track the indices of temporary
-    // variables in the intermediate code
-    std::vector<int> tempVariableIndices;
+    std::vector<int> tempVariableIndices; ///< Tracks indices for temporary variables.
 
-    // Computes the suffix for a given Expression (used for parsing operations)
+    /**
+     * @brief Computes the suffix for a given expression.
+     * 
+     * @param I An Expression object.
+     * @return A set of strings representing the suffix.
+     */
     std::set<std::string> compute_suffix(const Expression& I);
 
-    // Adds the non-terminal closure for a given Expression to a set of
-    // Expressions
+    /**
+     * @brief Adds the closure of a non-terminal for an expression to the given set.
+     * 
+     * @param I The current Expression object.
+     * @param pre The set of Expressions to update.
+     * @param cur_str The current string being processed.
+     */
     void add_non_terminal_closure(const Expression& I,
                                   std::set<Expression>& pre,
                                   const std::string& cur_str);
 
-    // Computes the closure of a given set of Expressions (closure operation in
-    // LR parsing)
+    /**
+     * @brief Computes the closure of a set of Expressions.
+     * 
+     * @param cur A set of Expressions to compute the closure for.
+     * @return A set of Expressions representing the closure.
+     */
     std::set<Expression> get_closure(const std::set<Expression>& cur);
 
-    // Initializes the symbol mapping (e.g., mapping strings to token types)
+    /**
+     * @brief Initializes the mapping of symbols to IDs.
+     */
     void init_symbol_mapping();
 
-    // Parses the expressions from the input list and fills out necessary
-    // grammar structures
+    /**
+     * @brief Parses and processes the expressions from the input data.
+     * 
+     * @param tmp A vector of strings containing the input expressions.
+     */
     void parse_expressions(std::vector<std::string>& tmp);
 
-    // Computes the first set for the given symbols (used for parsing and
-    // lookahead)
+    /**
+     * @brief Computes the first set for grammar symbols.
+     * 
+     * @param tmp A vector of strings representing the symbols.
+     */
     void compute_first_set(std::vector<std::string>& tmp);
 
-    // Retrieves the LR item sets and corresponding symbols
-    std::pair<std::vector<std::set<Expression>>, std::vector<std::string>>
-    get_Items(int idx);
+    /**
+     * @brief Retrieves LR(1) item sets and associated symbols.
+     * 
+     * @param idx The index of the current item set.
+     * @return A pair containing the item sets and associated symbols.
+     */
+    std::pair<std::vector<std::set<Expression>>, std::vector<std::string>> get_Items(int idx);
 
-    // Generates the LR parsing table (used for syntax analysis)
+    /**
+     * @brief Generates the LR parsing table.
+     */
     void get_LR_table();
 
-    // Generates the output for the parser in the form of quadruples and symbols
+    /**
+     * @brief Generates the parser's output based on intermediate results.
+     * 
+     * @param nxt The next state index.
+     * @param quadruples A vector of QuadTuple objects representing intermediate code.
+     * @param symbolTable A vector of Symbol objects for the parsed symbols.
+     * @param tempVariableIndices A vector of integers for temporary variable indices.
+     * @return A vector of strings representing the parser's output.
+     */
     std::vector<std::string> generateParserOutput(
         int nxt,
         const std::vector<parserStruct::QuadTuple>& quadruples,

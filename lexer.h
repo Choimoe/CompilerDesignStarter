@@ -6,45 +6,89 @@
 #include <map>
 #include "opkeymap.h"
 
-// Lexer class performs lexical analysis on input strings.
-// It tokenizes the input string into a list of meaningful components, such as
-// keywords, identifiers, numbers, and operators.
+/**
+ * @class Lexer
+ * @brief Performs lexical analysis on input strings by tokenizing them into meaningful components, 
+ * such as keywords, identifiers, numbers, and operators.
+ */
 class Lexer {
 public:
-    std::vector<std::pair<int, std::string>>
-        err_msg;  // Stores error messages, if any, during lexing.
+    /**
+     * @brief Stores error messages encountered during lexical analysis.
+     */
+    std::vector<std::pair<int, std::string>> err_msg;
 
-    // Constructor for the Lexer class
+    /**
+     * @brief Constructs a Lexer object and initializes necessary components.
+     */
     Lexer();
 
-    // Main function to process the input string and return a list of tokenized
-    // strings
+    /**
+     * @brief Analyzes the input string and generates a list of tokens.
+     * 
+     * @param str The input string to be tokenized.
+     * @return A vector of strings representing the tokenized components.
+     */
     std::vector<std::string> lexer(const std::string& str);
 
 private:
-    // Removes comments from the input string, returning the cleaned string.
+    /**
+     * @brief Removes comments from the input string.
+     * 
+     * @param str The input string potentially containing comments.
+     * @return A string with comments removed.
+     */
     std::string removeComments(std::string str);
 
-    // Inserts spaces where necessary to separate tokens in the input string.
+    /**
+     * @brief Inserts spaces where necessary to separate tokens in the input string.
+     * 
+     * @param str The input string to be processed.
+     * @return A string with spaces inserted for token separation.
+     */
     std::string insertSpaces(std::string str);
 
-    // Processes identifiers (e.g., variable names, function names) and returns
-    // a list of tokens.
+    /**
+     * @brief Processes identifiers such as variable or function names.
+     * 
+     * @param token The current token being analyzed.
+     * @param idx The current index in the string being processed.
+     * @return A vector of strings containing the identified tokens.
+     */
     std::vector<std::string> processIdentifier(std::string& token, size_t& idx);
 
-    // Processes numbers (e.g., integers, floating-point values) and returns a
-    // list of tokens.
+    /**
+     * @brief Processes numbers, including integers and floating-point values.
+     * 
+     * @param token The current token being analyzed.
+     * @param idx The current index in the string being processed.
+     * @return A vector of strings containing the identified number tokens.
+     */
     std::vector<std::string> processNumber(std::string& token, size_t& idx);
 
-    // Processes operators (e.g., '+', '-', '*', etc.) and returns a list of
-    // tokens.
+    /**
+     * @brief Processes operators such as '+', '-', '*', and so on.
+     * 
+     * @param token The current token being analyzed.
+     * @param idx The current index in the string being processed.
+     * @return A vector of strings containing the identified operator tokens.
+     */
     std::vector<std::string> processOperator(std::string& token, size_t& idx);
 
-    // Processes keywords (e.g., 'if', 'else', 'while', etc.) and returns a list
-    // of tokens.
+    /**
+     * @brief Processes keywords such as 'if', 'else', 'while', etc.
+     * 
+     * @param token The current token being analyzed.
+     * @return A vector of strings containing the identified keyword tokens.
+     */
     std::vector<std::string> processKeyword(std::string& token);
 
-    // Processes a single token and returns the corresponding list of tokens.
+    /**
+     * @brief Processes a single token and identifies its components.
+     * 
+     * @param token The token to be processed.
+     * @return A vector of strings representing the processed token components.
+     */
     std::vector<std::string> processToken(std::string token);
 };
 
