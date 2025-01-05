@@ -1,5 +1,6 @@
 #include "objectGen.h"
 #include <climits>
+#include <optional>
 
 std::string ObjectCodeGenerator::generate(const std::string& input) {
     std::istringstream iss(input);
@@ -166,56 +167,95 @@ void ObjectCodeGenerator::generateCode() {
                 handleArithmeticOperation(quad, i);
             } else if (quad.operation == "R" || quad.operation == "W") {
                 handleIOOperation(quad, i);
-            } else {
-                handleJumpOperation(quad, i);
             }
         }
-
         saveActiveVariables(blockEnd);
+        handleJumpOperation(quadruples[blockEnd], blockEnd);
     }
 }
 
 void ObjectCodeGenerator::handleArithmeticOperation(
     const parserStruct::QuadTuple& quad,
     int index) {
+    // Update usage status of arguments and destination
     updateUsePosition(quad.argument1, usageTable[index][0].usageStatus);
     updateUsePosition(quad.argument2, usageTable[index][1].usageStatus);
     updateUsePosition(quad.destination, usageTable[index][2].usageStatus);
 
-    std::string targetReg = allocateRegister(quad, index);
-    std::string arg1 = findRegister(quad.argument1);
-    std::string arg2 = quad.argument2;
-    if (arg2 != "-") {
-        arg2 = findRegister(arg2);
-    }
+    // Get target register to allocate
+    const std::string targetReg = allocateRegister(quad, index);
 
+    // Find the registers for arguments
+    const std::string arg1 = findRegister(quad.argument1);
+    std::optional<std::string> arg2 =
+        (quad.argument2 != "-")
+            ? std::make_optional(findRegister(quad.argument2))
+            : std::nullopt;
+
+    // Lambda to determine the address of an operand if it's a temporary
+    // variable
+    auto getRegisterOrImmediate = [&](const std::string_view operand) {
+        return (operand[0] == 'T') ? getAddress(std::string(operand))
+                                   : std::string(operand);
+    };
+
+    // If source register is the same as target register, handle accordingly
     if (arg1 == targetReg) {
-        if (arg2 != "-") {
-            std::string operand2 = (arg2[0] == 'T') ? getAddress(arg2) : arg2;
+        if (arg2) {
+            // If the second argument exists, handle the operation
+            const std::string operand2 = getRegisterOrImmediate(*arg2);
             transferOperation(quad.operation, targetReg, operand2, index);
         }
+
+        // Special handling for NOT operation
         if (quad.operation == "!") {
-            resultCode[index].push_back("not " + arg1);
+            resultCode[index].emplace_back("not " + arg1);
         }
+
         availableExpressions[quad.argument1].erase(targetReg);
     } else {
-        std::string operand1 = (arg1[0] == 'T') ? getAddress(arg1) : arg1;
-        resultCode[index].push_back("mov " + targetReg + ", " + operand1);
+        // Move the value of arg1 to target register
+        const std::string operand1 = getRegisterOrImmediate(arg1);
+        resultCode[index].emplace_back("mov " + targetReg + ", " + operand1);
 
-        if (arg2 != "-") {
-            std::string operand2 = (arg2[0] == 'T') ? getAddress(arg2) : arg2;
+        // Handle second argument if present
+        if (arg2) {
+            const std::string operand2 = getRegisterOrImmediate(*arg2);
             transferOperation(quad.operation, targetReg, operand2, index);
         }
     }
 
-    // Update register allocation state
-    if (arg2 == targetReg) {
+    // Update the state of the register allocation
+    if (arg2 && *arg2 == targetReg) {
         availableExpressions[quad.argument2].erase(targetReg);
     }
+
     registerValues[targetReg].clear();
     registerValues[targetReg].insert(quad.destination);
     availableExpressions[quad.destination].clear();
     availableExpressions[quad.destination].insert(targetReg);
+
+    updateUsePosition(quad.destination, usageTable[index][2].usageStatus, 1);
+
+    // Clean up temporary variables if needed
+    auto cleanupTempVariables = [this](const std::string& var) {
+        if (var[1] != 'B') {  // Only process temporary variables
+            auto& availableRegs = availableExpressions[var];
+            for (auto it = availableRegs.begin(); it != availableRegs.end();
+                 /* no increment here */) {
+                if (it->front() == 'R') {  // If it is a register
+                    registerValues[it->data()].erase(var);
+                    it = availableRegs.erase(it);  // Remove and update iterator
+                } else {
+                    ++it;  // Otherwise move to next
+                }
+            }
+        }
+    };
+
+    cleanupTempVariables(quad.argument1);
+    std::string argument2_value = quad.argument2.empty() ? "" : quad.argument2;
+    cleanupTempVariables(argument2_value);
 }
 
 void ObjectCodeGenerator::handleJumpOperation(
@@ -244,7 +284,7 @@ void ObjectCodeGenerator::handleJumpOperation(
         }
     } else if (quad.operation == "End") {
         resultCode[index].push_back("halt");
-    } else {  // Other conditional jumps
+    } else if (OpKeyMap::jumpAssembler.find(quad.operation) != OpKeyMap::jumpAssembler.end()){  // Other conditional jumps
         std::string arg1 = findRegister(quad.argument1);
         std::string arg2 = findRegister(quad.argument2);
 
@@ -260,7 +300,6 @@ void ObjectCodeGenerator::handleJumpOperation(
         } else {
             resultCode[index].push_back("cmp " + arg1 + ", " + arg2);
         }
-
         resultCode[index].push_back(OpKeyMap::jumpAssembler.at(quad.operation) +
                                     " ?" + quad.destination);
 
@@ -331,9 +370,10 @@ std::string ObjectCodeGenerator::formatOutput() const {
 }
 
 void ObjectCodeGenerator::updateUsePosition(const std::string& variable,
-                                            int status) {
-    if (variable[0] == 'T') {
-        usePosition[variable] = (status == -1) ? INT_MAX : status;
+                                            int status,
+                                            int mask) {
+    if (variable[0] == 'T' || mask) {
+        usePosition[variable] = (status == -1) ? SHRT_MAX : status;
     }
 }
 
@@ -371,53 +411,54 @@ void ObjectCodeGenerator::transferOperation(const std::string& operation,
 }
 
 std::string ObjectCodeGenerator::findRegister(const std::string& variable) {
-    // Check if the variable is already in a register
-    for (const auto& reg : availableExpressions[variable]) {
-        if (reg[0] == 'R') {
-            return reg;
+    for (const auto& s : availableExpressions[variable]) {
+        if (s[0] == 'R') {
+            return s;
         }
     }
-    return variable;  // Return original variable if no register is found
+    return variable;
 }
 
 std::string ObjectCodeGenerator::allocateRegister(
     const parserStruct::QuadTuple& quad,
     int quadIndex) {
-    // Special case: no register allocation needed for jumps and I/O operations
-    if (quad.operation[0] == 'j' || quad.operation == "W" ||
-        quad.operation == "R" || quad.operation == "End") {
-        return "R0";  // Default register for simple operations
-    }
+    // Check for non-arithmetic operations
+    if (quad.operation[0] != 'j' && quad.operation != "W" &&
+        quad.operation != "R" && quad.operation != "End") {
+        // Try to reuse register containing argument1
+        for (const auto& reg : availableExpressions[quad.argument1]) {
+            const auto& regValues = registerValues[reg];
+            bool isSingleRef =
+                (regValues.size() == 1 && *regValues.begin() == quad.argument1);
+            bool isNotLiving = (quad.argument1 == quad.destination ||
+                                usageTable[quadIndex][0].lifetime == 0);
 
-    // Try to reuse register if possible
-    for (const auto& reg : availableExpressions[quad.argument1]) {
-        const auto& values = registerValues[reg];
-        bool isSingleReference =
-            (values.size() == 1 && *values.begin() == quad.argument1);
-        bool isNotLiving = (quad.argument1 == quad.destination ||
-                            usageTable[quadIndex][0].lifetime == 0);
-
-        if (isSingleReference && isNotLiving) {
-            return reg;
+            if (isSingleRef && isNotLiving) {
+                return reg;
+            }
         }
     }
 
-    // Check for empty registers
-    const std::string registers[] = {"R0", "R1", "R2"};
-    for (const auto& reg : registers) {
-        if (registerValues[reg].empty()) {
-            return reg;
-        }
-    }
+    // Try to find empty register
+    std::string emptyReg = "R0";
+    if (registerValues[emptyReg].empty())
+        return emptyReg;
+    emptyReg = "R1";
+    if (registerValues[emptyReg].empty())
+        return emptyReg;
+    emptyReg = "R2";
+    if (registerValues[emptyReg].empty())
+        return emptyReg;
 
-    // Find best register to spill based on usage patterns
-    std::string selectedReg;
+    // No empty register found, need to select one to spill
+    std::vector<std::string> registers{"R0", "R1", "R2"};
 
-    // First try: find register with all variables already in memory
-    auto isInMemory = [this](const std::string& var) {
+    // First try: find register with all variables in memory
+    auto isInMemory = [this](const std::string& var) -> bool {
         return availableExpressions[var].count(var) > 0;
     };
 
+    std::string selectedReg;
     for (const auto& reg : registers) {
         bool allInMemory = std::all_of(registerValues[reg].begin(),
                                        registerValues[reg].end(), isInMemory);
@@ -431,16 +472,11 @@ std::string ObjectCodeGenerator::allocateRegister(
     // Second try: find register with variables used farthest in future
     if (selectedReg.empty()) {
         int maxUseDistance = -1;
-
         for (const auto& reg : registers) {
             int minUseDistance = std::numeric_limits<int>::max();
-
-            // Find the earliest usage of any variable in this register
             for (const auto& var : registerValues[reg]) {
                 minUseDistance = std::min(minUseDistance, usePosition[var]);
             }
-
-            // Select register with variables used farthest in future
             if (minUseDistance > maxUseDistance) {
                 selectedReg = reg;
                 maxUseDistance = minUseDistance;
@@ -448,14 +484,13 @@ std::string ObjectCodeGenerator::allocateRegister(
         }
     }
 
-    // Save current register contents to memory if necessary
-    for (const auto& var : registerValues[selectedReg]) {
+    // Save current register contents to memory if needed
+    for (auto var : registerValues[selectedReg]) {
         if (!availableExpressions[var].count(var) && var != quad.destination) {
             resultCode[quadIndex].push_back("mov " + getAddress(var) + ", " +
                                             selectedReg);
         }
 
-        // Update variable locations
         if (var == quad.argument1 ||
             (var == quad.argument2 &&
              registerValues[selectedReg].count(quad.argument1))) {
@@ -465,8 +500,6 @@ std::string ObjectCodeGenerator::allocateRegister(
         }
     }
 
-    // Clear register's current values
     registerValues[selectedReg].clear();
-
     return selectedReg;
 }

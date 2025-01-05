@@ -195,7 +195,7 @@ private:
      * @param variable The variable name.
      * @param status The new usage position of the variable.
      */
-    void updateUsePosition(const std::string& variable, int status);
+    void updateUsePosition(const std::string& variable, int status, int mask=0);
 
     // Memory management
 
