@@ -1,4 +1,5 @@
 #include "objectGen.h"
+#include <climits>
 
 std::string ObjectCodeGenerator::generate(const std::string& input) {
     std::istringstream iss(input);
@@ -46,70 +47,99 @@ void ObjectCodeGenerator::parseInput(std::istringstream& iss) {
 }
 
 void ObjectCodeGenerator::analyzeBlocks() {
-    std::vector<bool> entryPoints(quadruples.size(), false);
-    entryPoints[0] = true;
+    std::vector<bool> basicBlockEntryPoints(quadruples.size(), false);
+    basicBlockEntryPoints[0] = true;
 
-    // Mark entry points
-    for (size_t i = 0; i < quadruples.size(); ++i) {
-        const auto& quad = quadruples[i];
-        if (quad.operation[0] == 'j') {
-            int target = std::stoi(quad.destination);
-            entryPoints[target] = true;
-            if (quad.operation != "j" && i < quadruples.size() - 1) {
-                entryPoints[i + 1] = true;
+    // Identify all basic block entry points
+    for (size_t quadIndex = 0; quadIndex < quadruples.size(); ++quadIndex) {
+        const auto& currentQuad = quadruples[quadIndex];
+
+        // Using string_view for more efficient string operations
+        std::string_view operation{currentQuad.operation};
+
+        // Check for jump instructions
+        if (operation[0] == 'j') {
+            const auto targetIndex = std::stoi(currentQuad.destination);
+            basicBlockEntryPoints[targetIndex] = true;
+
+            // For conditional jumps, mark the fall-through block
+            if (operation != "j" && quadIndex < quadruples.size() - 1) {
+                basicBlockEntryPoints[quadIndex + 1] = true;
             }
         }
-        if (quad.operation == "W" || quad.operation == "R") {
-            entryPoints[i] = true;
+
+        // Mark I/O operations as block boundaries
+        if (operation == "W" || operation == "R") {
+            basicBlockEntryPoints[quadIndex] = true;
         }
     }
 
-    // Form blocks
-    for (size_t i = 0; i < entryPoints.size();) {
-        if (entryPoints[i]) {
-            size_t j;
-            for (j = i + 1; j < entryPoints.size(); j++) {
-                if (entryPoints[j] || quadruples[j - 1].operation[0] == 'j' ||
-                    quadruples[j - 1].operation == "End") {
-                    blocks.emplace_back(i, j - 1);
-                    break;
-                }
-            }
-            if (j == entryPoints.size()) {
-                blocks.emplace_back(i, j - 1);
-            }
-            i = j;
-        } else {
-            ++i;
+    // Construct basic blocks
+    blocks.clear();  // Ensure blocks container is empty
+
+    for (size_t currentIndex = 0;
+         currentIndex < basicBlockEntryPoints.size();) {
+        if (!basicBlockEntryPoints[currentIndex]) {
+            ++currentIndex;
+            continue;
         }
+
+        // Find the end of the current basic block
+        auto blockEndIndex = currentIndex + 1;
+        for (; blockEndIndex < basicBlockEntryPoints.size(); ++blockEndIndex) {
+            const auto& prevQuad = quadruples[blockEndIndex - 1];
+            if (basicBlockEntryPoints[blockEndIndex] ||
+                prevQuad.operation[0] == 'j' || prevQuad.operation == "End") {
+                break;
+            }
+        }
+
+        // Create the basic block
+        blocks.emplace_back(currentIndex, blockEndIndex - 1);
+        currentIndex = blockEndIndex;
     }
 }
 
 void ObjectCodeGenerator::analyzeVariableUsage() {
+    // Initialize data structures with meaningful names
     usageTable.resize(quadruples.size());
     memoryUsage.resize(symbolTable.size(), {-1, 1});
     temporaryUsage.resize(temporaryVarSize, {-1, 0});
 
-    for (auto& [start, end] : blocks) {
-        for (int i = end; i >= start; i--) {
-            std::array<std::string, 3> args = {quadruples[i].argument1,
-                                               quadruples[i].argument2,
-                                               quadruples[i].destination};
+    // Process each basic block
+    for (const auto& block : blocks) {
+        // Analyze instructions in reverse order within each block
+        for (int quadIndex = block.second; quadIndex >= block.first;
+             --quadIndex) {
+            const auto& quad = quadruples[quadIndex];
 
-            for (int j = 2; j >= 0; j--) {
-                const std::string& arg = args[j];
-                if (arg[0] == 'T') {
-                    int idx;
-                    if (arg[1] == 'B') {  // Symbol table variable
-                        idx = std::stoi(arg.substr(2));
-                        usageTable[i][j] = memoryUsage[idx];
-                        memoryUsage[idx] = {j == 2 ? -1 : i, j == 2 ? 0 : 1};
-                    } else {  // Temporary variable
-                        auto pos = arg.find('_');
-                        idx = std::stoi(arg.substr(1, pos - 1));
-                        usageTable[i][j] = temporaryUsage[idx];
-                        temporaryUsage[idx] = {j == 2 ? -1 : i, j == 2 ? 0 : 1};
-                    }
+            // Create array of arguments for uniform processing
+            const std::array<std::string_view, 3> quadArguments{
+                quad.argument1, quad.argument2, quad.destination};
+
+            // Process each argument in reverse order
+            for (int argIndex = 2; argIndex >= 0; --argIndex) {
+                const auto& currentArg = quadArguments[argIndex];
+
+                if (currentArg.empty() || currentArg[0] != 'T') {
+                    continue;
+                }
+
+                const bool isDestination = (argIndex == 2);
+
+                if (currentArg[1] == 'B') {  // Symbol table variable
+                    const auto symbolIndex =
+                        std::stoi(std::string(currentArg.substr(2)));
+                    usageTable[quadIndex][argIndex] = memoryUsage[symbolIndex];
+                    memoryUsage[symbolIndex] = {isDestination ? -1 : quadIndex,
+                                                isDestination ? 0 : 1};
+                } else {  // Temporary variable
+                    const auto underscore_pos = currentArg.find('_');
+                    const auto tempIndex = std::stoi(
+                        std::string(currentArg.substr(1, underscore_pos - 1)));
+                    usageTable[quadIndex][argIndex] = temporaryUsage[tempIndex];
+                    temporaryUsage[tempIndex] = {isDestination ? -1 : quadIndex,
+                                                 isDestination ? 0 : 1};
                 }
             }
         }
@@ -303,7 +333,7 @@ std::string ObjectCodeGenerator::formatOutput() const {
 void ObjectCodeGenerator::updateUsePosition(const std::string& variable,
                                             int status) {
     if (variable[0] == 'T') {
-        usePosition[variable] = (status == -1) ? 114514 : status;
+        usePosition[variable] = (status == -1) ? INT_MAX : status;
     }
 }
 

@@ -16,11 +16,13 @@
 
 /**
  * @class ObjectCodeGenerator
- * @brief This class generates object code from intermediate representations such as quadruples.
- * 
- * The ObjectCodeGenerator is responsible for parsing input, analyzing basic blocks, allocating
- * registers, and generating optimized object code. It manages symbol tables, temporary variables,
- * and usage analysis for efficient code generation.
+ * @brief This class generates object code from intermediate representations
+ * such as quadruples.
+ *
+ * The ObjectCodeGenerator is responsible for parsing input, analyzing basic
+ * blocks, allocating registers, and generating optimized object code. It
+ * manages symbol tables, temporary variables, and usage analysis for efficient
+ * code generation.
  */
 class ObjectCodeGenerator {
 public:
@@ -30,8 +32,9 @@ public:
     ObjectCodeGenerator() = default;
 
     /**
-     * @brief Generates object code from the provided intermediate representation.
-     * 
+     * @brief Generates object code from the provided intermediate
+     * representation.
+     *
      * @param input The intermediate representation as a string.
      * @return A formatted string containing the generated object code.
      */
@@ -40,7 +43,8 @@ public:
 private:
     // Data members
 
-    /// Symbol table containing memory nodes representing variables and their attributes.
+    /// Symbol table containing memory nodes representing variables and their
+    /// attributes.
     std::vector<objectStruct::MemoryNode> symbolTable;
 
     /// Set of all variable names encountered during code generation.
@@ -55,7 +59,8 @@ private:
     /// Tracks the last usage position of variables for optimization purposes.
     std::unordered_map<std::string, int> usePosition;
 
-    /// Maps available expressions to their respective sets of variables for reuse.
+    /// Maps available expressions to their respective sets of variables for
+    /// reuse.
     std::unordered_map<std::string, std::set<std::string>> availableExpressions;
 
     /// Maps registers to their currently held variable values.
@@ -82,9 +87,11 @@ private:
     // Utility functions
 
     /**
-     * @brief Parses the input string into intermediate structures such as quadruples.
-     * 
-     * @param iss Input string stream containing the intermediate representation.
+     * @brief Parses the input string into intermediate structures such as
+     * quadruples.
+     *
+     * @param iss Input string stream containing the intermediate
+     * representation.
      */
     void parseInput(std::istringstream& iss);
 
@@ -94,13 +101,14 @@ private:
     void analyzeBlocks();
 
     /**
-     * @brief Generates object code from the analyzed intermediate representation.
+     * @brief Generates object code from the analyzed intermediate
+     * representation.
      */
     void generateCode();
 
     /**
      * @brief Formats the generated object code into a final string output.
-     * 
+     *
      * @return The formatted object code as a string.
      */
     std::string formatOutput() const;
@@ -109,7 +117,7 @@ private:
 
     /**
      * @brief Retrieves the memory address of a given variable.
-     * 
+     *
      * @param variable The variable name.
      * @return A string representation of the variable's memory address.
      */
@@ -117,7 +125,7 @@ private:
 
     /**
      * @brief Allocates a register for a specific quadruple operation.
-     * 
+     *
      * @param quad The quadruple requiring a register.
      * @param quadIndex The index of the quadruple in the list.
      * @return The name of the allocated register.
@@ -127,9 +135,10 @@ private:
 
     /**
      * @brief Finds the register currently holding a specific variable's value.
-     * 
+     *
      * @param variable The variable name.
-     * @return The name of the register holding the variable, or an empty string if none.
+     * @return The name of the register holding the variable, or an empty string
+     * if none.
      */
     std::string findRegister(const std::string& variable);
 
@@ -137,7 +146,7 @@ private:
 
     /**
      * @brief Handles the generation of object code for arithmetic operations.
-     * 
+     *
      * @param quad The quadruple representing the arithmetic operation.
      * @param index The index of the quadruple in the list.
      */
@@ -146,7 +155,7 @@ private:
 
     /**
      * @brief Handles the generation of object code for jump operations.
-     * 
+     *
      * @param quad The quadruple representing the jump operation.
      * @param index The index of the quadruple in the list.
      */
@@ -154,7 +163,7 @@ private:
 
     /**
      * @brief Handles the generation of object code for input/output operations.
-     * 
+     *
      * @param quad The quadruple representing the I/O operation.
      * @param index The index of the quadruple in the list.
      */
@@ -162,7 +171,7 @@ private:
 
     /**
      * @brief Transfers an operation to object code with the given operands.
-     * 
+     *
      * @param operation The operation type (e.g., ADD, SUB).
      * @param x The first operand.
      * @param y The second operand.
@@ -182,7 +191,7 @@ private:
 
     /**
      * @brief Updates the usage position of a variable in the usePosition map.
-     * 
+     *
      * @param variable The variable name.
      * @param status The new usage position of the variable.
      */
@@ -192,14 +201,15 @@ private:
 
     /**
      * @brief Saves active variables to memory at the end of a block.
-     * 
+     *
      * @param blockEnd The index marking the end of the block.
      */
     void saveActiveVariables(int blockEnd);
 
     // Variable tracking
 
-    /// Tracks variable usage information for registers, memory, and temporaries.
+    /// Tracks variable usage information for registers, memory, and
+    /// temporaries.
     std::vector<std::array<objectStruct::UsageInfo, 3>> usageTable;
 
     /// Usage information for memory variables.
