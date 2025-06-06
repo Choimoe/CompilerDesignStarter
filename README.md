@@ -1,3 +1,5 @@
+Tips: 可以在右边的 [Release 页面](https://github.com/Choimoe/CompilerDesignStarter/releases/tag/2024) 找到可以通过的代码。
+
 # CompilerDesignStarter
 
 A simple and modular C++17-based compiler framework designed to handle lexical analysis, parsing, intermediate code generation, and object code generation.
